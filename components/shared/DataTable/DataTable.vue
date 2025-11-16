@@ -40,7 +40,7 @@ import type {
 
 // Props
 const props = withDefaults(defineProps<DataTableProps<T>>(), {
-  searchable: true,
+  searchable: false,
   searchPlaceholder: 'Buscar...',
   loading: false,
   emptyMessage: 'No hay datos disponibles',
@@ -267,15 +267,16 @@ const visibleColumns = computed(() => props.columns.filter((col) => !col.hidden)
     <div class="rounded-md border">
       <Table>
         <TableHeader>
-          <TableRow>
+          <TableRow class="bg-primary hover:bg-primary">
             <TableHead
               v-for="column in visibleColumns"
               :key="column.key"
               :class="[
                 column.class,
+                'text-primary-foreground font-semibold',
                 column.align === 'center' && 'text-center',
                 column.align === 'right' && 'text-right',
-                column.sortable && 'cursor-pointer select-none hover:bg-muted/50',
+                column.sortable && 'cursor-pointer select-none hover:bg-primary/90',
               ]"
               :style="column.width ? { width: column.width } : undefined"
               @click="column.sortable && handleSort(column)"
@@ -304,8 +305,35 @@ const visibleColumns = computed(() => props.columns.filter((col) => !col.hidden)
 
           <!-- Sin datos -->
           <TableRow v-else-if="paginatedData.length === 0">
-            <TableCell :colspan="visibleColumns.length" class="text-center py-8">
-              <TableEmpty>{{ emptyMessage }}</TableEmpty>
+            <TableCell :colspan="visibleColumns.length" class="text-center py-16">
+              <div class="flex flex-col items-center justify-center space-y-4">
+                <!-- Icono -->
+                <div class="rounded-full bg-muted p-4">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-12 w-12 text-muted-foreground"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M3 3v18h18" />
+                    <path d="M18 17V9" />
+                    <path d="M13 17V5" />
+                    <path d="M8 17v-3" />
+                  </svg>
+                </div>
+
+                <!-- Texto -->
+                <div class="space-y-1">
+                  <p class="text-lg font-semibold text-foreground">{{ emptyMessage }}</p>
+                  <p class="text-sm text-muted-foreground max-w-md">
+                    No se encontraron registros que coincidan con los criterios de búsqueda.
+                  </p>
+                </div>
+              </div>
             </TableCell>
           </TableRow>
 
@@ -314,7 +342,10 @@ const visibleColumns = computed(() => props.columns.filter((col) => !col.hidden)
             v-else
             v-for="(row, index) in paginatedData"
             :key="getRowKey(row, index)"
-            :class="getRowClass(row)"
+            :class="[
+              getRowClass(row),
+              index % 2 === 0 ? 'bg-background' : 'bg-muted/30'
+            ]"
             @click="handleRowClick(row)"
           >
             <TableCell

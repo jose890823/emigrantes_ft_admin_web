@@ -48,17 +48,23 @@ export default defineNuxtConfig({
     {
       path: '~/components',
       pathPrefix: false,
+      extensions: ['.vue'],
+      ignore: ['**/*.ts', '**/*.js', '**/types.ts', '**/index.ts']
     },
     // Auto-descubrimiento de componentes de módulos
     {
       path: '~/modules/*/components',
       pathPrefix: false,
-      global: false
+      global: false,
+      extensions: ['.vue'],
+      ignore: ['**/*.ts', '**/*.js', '**/types.ts', '**/index.ts']
     },
     {
       path: '~/modules/_shared/components',
       pathPrefix: false,
-      global: true
+      global: true,
+      extensions: ['.vue'],
+      ignore: ['**/*.ts', '**/*.js', '**/types.ts', '**/index.ts']
     }
   ],
 })

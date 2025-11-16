@@ -22,6 +22,20 @@ export const modules: ModuleConfig[] = [
     label: 'Personas'
   },
   {
+    name: 'users',
+    enabled: true,
+    route: '/users',
+    icon: 'users',
+    label: 'Usuarios'
+  },
+  {
+    name: 'poa',
+    enabled: true,
+    route: '/poa',
+    icon: 'file',
+    label: 'Poderes Notariales'
+  },
+  {
     name: 'producto',
     enabled: true,
     route: '/productos',

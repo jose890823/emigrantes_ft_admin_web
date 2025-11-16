@@ -58,7 +58,7 @@
 
 <script setup lang="ts">
 import { Button } from '~/components/ui/button'
-import FormField from '~/components/forms/FormField.vue'
+import FormField from '~/components/forms/BaseFormField.vue'
 import type { Persona, CreatePersonaDto } from '../types'
 
 interface Props {

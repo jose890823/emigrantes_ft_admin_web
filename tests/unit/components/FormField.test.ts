@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import FormField from '~/components/forms/FormField.vue'
+import FormField from '~/components/forms/BaseFormField.vue'
 
 describe('FormField', () => {
   it('should render label when provided', () => {

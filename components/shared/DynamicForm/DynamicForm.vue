@@ -35,10 +35,16 @@ const props = withDefaults(defineProps<DynamicFormConfig>(), {
   showCancel: false,
   loading: false,
   columns: 1,
+  whiteFieldBackground: false,
 })
 
 // Emits
 const emit = defineEmits<DynamicFormEmits>()
+
+// Clase de fondo para los campos
+const fieldBackgroundClass = computed(() => {
+  return props.whiteFieldBackground ? 'bg-white' : ''
+})
 
 // Configurar vee-validate con el schema de Zod
 const validationSchema = toTypedSchema(props.validationSchema)
@@ -126,7 +132,7 @@ watch(values, (newValues) => {
               :placeholder="field.placeholder"
               :disabled="field.disabled || loading"
               v-bind="{ ...componentField, ...field.attrs }"
-              :class="field.class"
+              :class="[field.class, fieldBackgroundClass]"
             />
 
             <!-- Number Input -->
@@ -136,7 +142,7 @@ watch(values, (newValues) => {
               :placeholder="field.placeholder"
               :disabled="field.disabled || loading"
               v-bind="{ ...componentField, ...field.attrs }"
-              :class="field.class"
+              :class="[field.class, fieldBackgroundClass]"
             />
 
             <!-- Date Input -->
@@ -146,7 +152,7 @@ watch(values, (newValues) => {
               :placeholder="field.placeholder"
               :disabled="field.disabled || loading"
               v-bind="{ ...componentField, ...field.attrs }"
-              :class="field.class"
+              :class="[field.class, fieldBackgroundClass]"
             />
 
             <!-- Textarea -->
@@ -155,7 +161,7 @@ watch(values, (newValues) => {
               :placeholder="field.placeholder"
               :disabled="field.disabled || loading"
               v-bind="{ ...componentField, ...field.attrs }"
-              :class="field.class"
+              :class="[field.class, fieldBackgroundClass]"
             />
 
             <!-- Select -->
@@ -164,7 +170,7 @@ watch(values, (newValues) => {
               :disabled="field.disabled || loading"
               v-bind="componentField"
             >
-              <SelectTrigger :class="field.class">
+              <SelectTrigger :class="[field.class, fieldBackgroundClass]">
                 <SelectValue :placeholder="field.placeholder || 'Seleccionar...'" />
               </SelectTrigger>
               <SelectContent>

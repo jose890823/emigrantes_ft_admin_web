@@ -96,7 +96,7 @@ import {
   CardTitle
 } from '~/components/ui/card'
 import { DataTable } from '~/components/shared/DataTable'
-import FormField from '~/components/forms/FormField.vue'
+import FormField from '~/components/forms/BaseFormField.vue'
 import ConfirmDialog from '~/components/common/ConfirmDialog.vue'
 
 const showDialog = ref(false)

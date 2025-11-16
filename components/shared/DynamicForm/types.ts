@@ -56,8 +56,8 @@ export interface FormFieldConfig {
 export interface DynamicFormConfig {
   /** Campos del formulario */
   fields: FormFieldConfig[]
-  /** Schema de validación Zod */
-  validationSchema: z.ZodObject<any>
+  /** Schema de validación Zod (puede ser ZodObject o ZodEffects) */
+  validationSchema: z.ZodObject<any> | z.ZodEffects<any>
   /** Valores iniciales del formulario */
   initialValues?: Record<string, any>
   /** Texto del botón de submit */
@@ -70,6 +70,8 @@ export interface DynamicFormConfig {
   loading?: boolean
   /** Layout de los campos (columnas) */
   columns?: 1 | 2 | 3 | 4
+  /** Si los campos deben tener fondo blanco */
+  whiteFieldBackground?: boolean
 }
 
 /**
