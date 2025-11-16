@@ -15,13 +15,6 @@ export interface ModuleConfig {
 
 export const modules: ModuleConfig[] = [
   {
-    name: 'persona',
-    enabled: true,
-    route: '/personas',
-    icon: 'users',
-    label: 'Personas'
-  },
-  {
     name: 'users',
     enabled: true,
     route: '/users',
@@ -34,13 +27,6 @@ export const modules: ModuleConfig[] = [
     route: '/poa',
     icon: 'file',
     label: 'Poderes Notariales'
-  },
-  {
-    name: 'producto',
-    enabled: true,
-    route: '/productos',
-    icon: 'package',
-    label: 'Productos'
   }
 ]
 
