@@ -30,11 +30,21 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '~/components/ui/sidebar'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '~/components/ui/dialog'
+import { Button } from '~/components/ui/button'
 
 const { user, logout } = useAuth()
 const { success } = useToast()
 const { isMobile } = useSidebar()
 const loggingOut = ref(false)
+const showLogoutDialog = ref(false)
 
 // Generar iniciales del usuario
 const userInitials = computed(() => {
@@ -44,11 +54,12 @@ const userInitials = computed(() => {
   return (first + last).toUpperCase() || 'U'
 })
 
-const handleLogout = async () => {
-  if (!confirm('¿Estás seguro que deseas cerrar sesión?')) {
-    return
-  }
+const openLogoutDialog = () => {
+  showLogoutDialog.value = true
+}
 
+const confirmLogout = async () => {
+  showLogoutDialog.value = false
   loggingOut.value = true
 
   try {
@@ -59,6 +70,10 @@ const handleLogout = async () => {
   } finally {
     loggingOut.value = false
   }
+}
+
+const cancelLogout = () => {
+  showLogoutDialog.value = false
 }
 </script>
 
@@ -137,7 +152,7 @@ const handleLogout = async () => {
           <DropdownMenuItem
             class="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950"
             :disabled="loggingOut"
-            @click="handleLogout"
+            @click="openLogoutDialog"
           >
             <LogOut class="size-4" />
             {{ loggingOut ? 'Cerrando sesión...' : 'Cerrar Sesión' }}
@@ -145,5 +160,25 @@ const handleLogout = async () => {
         </DropdownMenuContent>
       </DropdownMenu>
     </SidebarMenuItem>
+
+    <!-- Diálogo de confirmación de logout -->
+    <Dialog v-model:open="showLogoutDialog">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cerrar Sesión</DialogTitle>
+          <DialogDescription>
+            ¿Estás seguro que deseas cerrar sesión? Tendrás que volver a iniciar sesión para acceder a tu cuenta.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" @click="cancelLogout">
+            Cancelar
+          </Button>
+          <Button variant="destructive" @click="confirmLogout" :disabled="loggingOut">
+            {{ loggingOut ? 'Cerrando sesión...' : 'Cerrar Sesión' }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </SidebarMenu>
 </template>
