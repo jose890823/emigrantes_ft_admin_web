@@ -1,6 +1,7 @@
 {
   "welcome": "Bienvenido",
   "app": {
+    "name": "Emigrantes FT Admin",
     "title": "Plantilla de Administración",
     "description": "Plantilla base profesional con Nuxt 3"
   },

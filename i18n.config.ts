@@ -5,6 +5,7 @@ export default defineI18nConfig(() => ({
     en: {
       welcome: 'Welcome',
       app: {
+        name: 'Emigrantes FT Admin',
         title: 'Admin Template',
         description: 'Professional base template with Nuxt 3'
       },
@@ -43,6 +44,7 @@ export default defineI18nConfig(() => ({
     es: {
       welcome: 'Bienvenido',
       app: {
+        name: 'Emigrantes FT Admin',
         title: 'Plantilla de Administración',
         description: 'Plantilla base profesional con Nuxt 3'
       },

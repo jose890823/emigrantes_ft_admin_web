@@ -3,6 +3,13 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
   devtools: { enabled: true },
 
+  runtimeConfig: {
+    public: {
+      apiUrl: process.env.NUXT_PUBLIC_API_URL || 'http://localhost:3001/api',
+      appName: process.env.NUXT_PUBLIC_APP_NAME || 'Emigrantes FT Admin',
+    },
+  },
+
   modules: [
     '@nuxtjs/tailwindcss',
     'shadcn-nuxt',
@@ -18,7 +25,11 @@ export default defineNuxtConfig({
 
   i18n: {
     defaultLocale: 'es',
-    locales: ['en', 'es'],
+    locales: [
+      { code: 'en', file: 'en.json', name: 'English' },
+      { code: 'es', file: 'es.json', name: 'Español' },
+    ],
+    langDir: './lang',
   },
 
   shadcn: {

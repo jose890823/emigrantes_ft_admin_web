@@ -1,6 +1,7 @@
 {
   "welcome": "Welcome",
   "app": {
+    "name": "Emigrantes FT Admin",
     "title": "Admin Template",
     "description": "Professional base template with Nuxt 3"
   },

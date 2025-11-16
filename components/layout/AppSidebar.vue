@@ -50,21 +50,7 @@
     </SidebarContent>
 
     <SidebarFooter>
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton size="lg" as-child>
-            <button class="flex items-center gap-2">
-              <div class="flex aspect-square size-8 items-center justify-center rounded-lg bg-muted">
-                <UserIcon class="size-4" />
-              </div>
-              <div class="grid flex-1 text-left text-sm leading-tight">
-                <span class="truncate font-semibold">Usuario</span>
-                <span class="truncate text-xs text-muted-foreground">user@example.com</span>
-              </div>
-            </button>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
+      <NavUser />
     </SidebarFooter>
   </Sidebar>
 </template>
@@ -89,9 +75,9 @@ import {
   SettingsIcon,
   ChartBarIcon,
   FileTextIcon,
-  UserIcon
 } from 'lucide-vue-next'
 import { getActiveModules } from '~/app/module-config'
+import NavUser from '~/components/layout/NavUser.vue'
 
 const activeModules = getActiveModules()
 const route = useRoute()
