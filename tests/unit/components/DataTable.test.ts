@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import DataTable from '~/components/common/DataTable.vue'
+import { DataTable } from '~/components/shared/DataTable'
 
 describe('DataTable', () => {
   const sampleData = [

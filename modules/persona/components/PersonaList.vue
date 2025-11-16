@@ -15,16 +15,16 @@
       @edit="$emit('edit', $event)"
       @delete="$emit('delete', $event)"
     >
-      <template #cell-activo="{ item }">
+      <template #cell-activo="{ row }">
         <span
           :class="[
             'px-2 py-1 rounded-full text-xs font-medium',
-            item.activo
+            row.activo
               ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
               : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
           ]"
         >
-          {{ item.activo ? 'Activo' : 'Inactivo' }}
+          {{ row.activo ? 'Activo' : 'Inactivo' }}
         </span>
       </template>
     </DataTable>
@@ -33,7 +33,7 @@
 
 <script setup lang="ts">
 import { Button } from '~/components/ui/button'
-import DataTable from '~/components/common/DataTable.vue'
+import { DataTable } from '~/components/shared/DataTable'
 import type { Persona } from '../types'
 
 interface Props {

@@ -95,7 +95,7 @@ import {
   CardHeader,
   CardTitle
 } from '~/components/ui/card'
-import DataTable from '~/components/common/DataTable.vue'
+import { DataTable } from '~/components/shared/DataTable'
 import FormField from '~/components/forms/FormField.vue'
 import ConfirmDialog from '~/components/common/ConfirmDialog.vue'
 
