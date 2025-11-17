@@ -18,9 +18,12 @@ export default defineEventHandler(async (event) => {
 
     return response
   } catch (error: any) {
+    console.error('Error fetching POA stats:', error)
+    console.error('Error data:', error.data)
+    console.error('Error statusCode:', error.statusCode)
     throw createError({
-      statusCode: error.statusCode || 500,
-      message: error.data?.message || 'Error al obtener las estadísticas',
+      statusCode: error.statusCode || error.status || 500,
+      message: error.data?.message || error.message || 'Error al obtener las estadísticas',
     })
   }
 })
