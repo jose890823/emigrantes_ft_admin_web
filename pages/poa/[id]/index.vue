@@ -3,8 +3,8 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { usePoa } from '~/modules/poa/composables/usePoa'
 import { useUsers } from '~/modules/users/composables/useUsers'
-import { POAStatus, POAType, POAStatusLabels, POATypeLabels, POAStatusVariants } from '~/modules/poa/types'
-import type { POAHistory, POAExecution, POADocument } from '~/modules/poa/types'
+import { POAStatus, POAType, POAStatusLabels, POATypeLabels, POAStatusVariants, POAExecutionType } from '~/modules/poa/types'
+import type { POAHistory, POAExecution, POADocument, ExecutePOADto } from '~/modules/poa/types'
 import { Button } from '~/components/ui/button'
 import { Badge } from '~/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
@@ -12,6 +12,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs'
 import { Textarea } from '~/components/ui/textarea'
 import { Input } from '~/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
+import { Label } from '~/components/ui/label'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '~/components/ui/alert-dialog'
 
 definePageMeta({
   middleware: ['auth'],
@@ -32,6 +43,7 @@ const {
   notarizePOA,
   activatePOA,
   cancelPOA,
+  createExecution,
   getHistory,
   getExecutions,
   getDocuments,
@@ -55,10 +67,30 @@ const loadingDocuments = ref(false)
 const showRejectModal = ref(false)
 const showAssignModal = ref(false)
 const showCancelModal = ref(false)
+const showExecutionModal = ref(false)
 const rejectReason = ref('')
 const selectedAdminId = ref('')
 const cancelReason = ref('')
 const actionNotes = ref('')
+
+// Formulario de ejecución
+const executionForm = ref<ExecutePOADto>({
+  executionType: POAExecutionType.BANK_TRANSACTION,
+  description: '',
+  amount: undefined,
+  recipient: '',
+  proofDocuments: [],
+  notes: '',
+})
+
+// Temporal para documento de prueba
+const proofDocumentUrl = ref('')
+
+// Modal de confirmación genérico
+const showConfirmDialog = ref(false)
+const confirmDialogTitle = ref('')
+const confirmDialogDescription = ref('')
+const confirmDialogAction = ref<(() => Promise<void>) | null>(null)
 
 // Upload de archivos
 const selectedFile = ref<File | null>(null)
@@ -138,6 +170,23 @@ const loadAdmins = async () => {
 // Volver a la lista
 const goBack = () => {
   router.push('/poa')
+}
+
+// Mostrar diálogo de confirmación
+const showConfirm = (title: string, description: string, action: () => Promise<void>) => {
+  confirmDialogTitle.value = title
+  confirmDialogDescription.value = description
+  confirmDialogAction.value = action
+  showConfirmDialog.value = true
+}
+
+// Ejecutar acción confirmada
+const handleConfirmAction = async () => {
+  if (confirmDialogAction.value) {
+    await confirmDialogAction.value()
+  }
+  showConfirmDialog.value = false
+  confirmDialogAction.value = null
 }
 
 // Formatear fecha
@@ -290,18 +339,28 @@ const canCancel = computed(() => {
   return currentPOA.value && ![POAStatus.CANCELLED, POAStatus.COMPLETED].includes(currentPOA.value.status as POAStatus)
 })
 
-// Manejar aprobación
-const handleApprove = async () => {
-  if (!confirm('¿Está seguro de aprobar este POA?')) return
+const canExecute = computed(() => {
+  return currentPOA.value?.status === POAStatus.ACTIVATED || currentPOA.value?.status === POAStatus.EXECUTED
+})
 
-  try {
-    await approvePOA(poaId.value, { notes: actionNotes.value || undefined })
-    await loadPOA()
-    await loadHistory()
-    actionNotes.value = ''
-  } catch (e) {
-    console.error('Error approving POA:', e)
-  }
+// Manejar aprobación
+const handleApprove = () => {
+  showConfirm(
+    'Aprobar POA',
+    '¿Está seguro de que desea aprobar este Poder Notarial? Esta acción no se puede deshacer.',
+    async () => {
+      try {
+        await approvePOA(poaId.value, { adminNotes: actionNotes.value || undefined })
+        await loadPOA()
+        await loadHistory()
+        actionNotes.value = ''
+        alert('POA aprobado exitosamente')
+      } catch (e: any) {
+        console.error('Error approving POA:', e)
+        alert(`Error al aprobar el POA: ${e.message || 'Error desconocido'}`)
+      }
+    }
+  )
 }
 
 // Manejar rechazo
@@ -321,8 +380,10 @@ const handleReject = async () => {
     showRejectModal.value = false
     rejectReason.value = ''
     actionNotes.value = ''
-  } catch (e) {
+    alert('POA rechazado exitosamente')
+  } catch (e: any) {
     console.error('Error rejecting POA:', e)
+    alert(`Error al rechazar el POA: ${e.message || 'Error desconocido'}`)
   }
 }
 
@@ -336,44 +397,60 @@ const handleAssign = async () => {
   try {
     await assignPOA(poaId.value, {
       adminId: selectedAdminId.value,
-      notes: actionNotes.value || undefined,
     })
     await loadPOA()
     await loadHistory()
     showAssignModal.value = false
     selectedAdminId.value = ''
     actionNotes.value = ''
-  } catch (e) {
+    alert('POA asignado exitosamente')
+  } catch (e: any) {
     console.error('Error assigning POA:', e)
+    alert(`Error al asignar el POA: ${e.message || 'Error desconocido'}`)
   }
 }
 
 // Manejar notarización
-const handleNotarize = async () => {
-  if (!confirm('¿Está seguro de marcar este POA como notarizado?')) return
-
-  try {
-    await notarizePOA(poaId.value, { notes: actionNotes.value || undefined })
-    await loadPOA()
-    await loadHistory()
-    actionNotes.value = ''
-  } catch (e) {
-    console.error('Error notarizing POA:', e)
-  }
+const handleNotarize = () => {
+  showConfirm(
+    'Notarizar POA',
+    '¿Está seguro de marcar este POA como notarizado? Confirme que el proceso de notarización legal se ha completado.',
+    async () => {
+      try {
+        await notarizePOA(poaId.value, { notarizationNotes: actionNotes.value || undefined })
+        await loadPOA()
+        await loadHistory()
+        actionNotes.value = ''
+        alert('POA notarizado exitosamente')
+      } catch (e: any) {
+        console.error('Error notarizing POA:', e)
+        alert(`Error al notarizar el POA: ${e.message || 'Error desconocido'}`)
+      }
+    }
+  )
 }
 
 // Manejar activación
-const handleActivate = async () => {
-  if (!confirm('¿Está seguro de activar este POA?')) return
-
-  try {
-    await activatePOA(poaId.value, { notes: actionNotes.value || undefined })
-    await loadPOA()
-    await loadHistory()
-    actionNotes.value = ''
-  } catch (e) {
-    console.error('Error activating POA:', e)
-  }
+const handleActivate = () => {
+  showConfirm(
+    'Activar POA',
+    '¿Está seguro de activar este Poder Notarial? Una vez activado, el poder entrará en vigor y podrá ser ejecutado.',
+    async () => {
+      try {
+        await activatePOA(poaId.value, {
+          activationReason: 'other',
+          activationDetails: actionNotes.value || undefined,
+        })
+        await loadPOA()
+        await loadHistory()
+        actionNotes.value = ''
+        alert('POA activado exitosamente')
+      } catch (e: any) {
+        console.error('Error activating POA:', e)
+        alert(`Error al activar el POA: ${e.message || 'Error desconocido'}`)
+      }
+    }
+  )
 }
 
 // Manejar cancelación
@@ -393,8 +470,49 @@ const handleCancel = async () => {
     showCancelModal.value = false
     cancelReason.value = ''
     actionNotes.value = ''
-  } catch (e) {
+    alert('POA cancelado exitosamente')
+  } catch (e: any) {
     console.error('Error canceling POA:', e)
+    alert(`Error al cancelar el POA: ${e.message || 'Error desconocido'}`)
+  }
+}
+
+// Resetear formulario de ejecución
+const resetExecutionForm = () => {
+  executionForm.value = {
+    executionType: POAExecutionType.BANK_TRANSACTION,
+    description: '',
+    amount: undefined,
+    recipient: '',
+    proofDocuments: [],
+    notes: '',
+  }
+  proofDocumentUrl.value = ''
+}
+
+// Manejar ejecución de instrucción
+const handleExecuteInstruction = async () => {
+  if (!executionForm.value.description.trim()) {
+    alert('Debe ingresar una descripción de la ejecución')
+    return
+  }
+
+  // Agregar URL de documento de prueba si se proporcionó
+  if (proofDocumentUrl.value.trim()) {
+    executionForm.value.proofDocuments = [proofDocumentUrl.value.trim()]
+  }
+
+  try {
+    await createExecution(poaId.value, executionForm.value)
+    await loadPOA()
+    await loadHistory()
+    await loadExecutions()
+    showExecutionModal.value = false
+    resetExecutionForm()
+    alert('Instrucción ejecutada exitosamente')
+  } catch (e: any) {
+    console.error('Error executing instruction:', e)
+    alert(`Error al ejecutar la instrucción: ${e.message || 'Error desconocido'}`)
   }
 }
 
@@ -430,15 +548,19 @@ const handleUploadDocument = async () => {
 }
 
 // Eliminar documento
-const handleDeleteDocument = async (documentId: string) => {
-  if (!confirm('¿Está seguro de eliminar este documento?')) return
-
-  try {
-    await deleteDocument(poaId.value, documentId)
-    await loadDocuments()
-  } catch (e) {
-    console.error('Error deleting document:', e)
-  }
+const handleDeleteDocument = (documentId: string) => {
+  showConfirm(
+    'Eliminar Documento',
+    '¿Está seguro de que desea eliminar este documento? Esta acción no se puede deshacer.',
+    async () => {
+      try {
+        await deleteDocument(poaId.value, documentId)
+        await loadDocuments()
+      } catch (e) {
+        console.error('Error deleting document:', e)
+      }
+    }
+  )
 }
 
 // Administradores disponibles
@@ -617,6 +739,9 @@ const availableAdmins = computed(() => {
             <Button v-if="canActivate" size="sm" @click="handleActivate">
               Activar
             </Button>
+            <Button v-if="canExecute" variant="default" size="sm" @click="showExecutionModal = true">
+              Ejecutar Instrucción
+            </Button>
             <Button v-if="canCancel" variant="outline" size="sm" @click="showCancelModal = true">
               Cancelar POA
             </Button>
@@ -625,7 +750,7 @@ const availableAdmins = computed(() => {
       </Card>
 
       <!-- Tabs -->
-      <Tabs v-model="activeTab" class="w-full">
+      <Tabs :default-value="activeTab" @update:model-value="(val: string) => activeTab = val" class="w-full">
         <TabsList class="grid w-full grid-cols-4">
           <TabsTrigger value="details">Detalles</TabsTrigger>
           <TabsTrigger value="documents">Documentos</TabsTrigger>
@@ -801,30 +926,96 @@ const availableAdmins = computed(() => {
               </div>
 
               <!-- Lista de documentos -->
-              <div v-if="loadingDocuments" class="text-center py-8">
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+              <div v-if="loadingDocuments" class="text-center py-12">
+                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4"></div>
+                <p class="text-sm text-muted-foreground">Cargando documentos...</p>
               </div>
-              <div v-else-if="documents.length === 0" class="text-center py-8 text-muted-foreground">
-                No hay documentos adjuntos
+              <div v-else-if="documents.length === 0" class="text-center py-16">
+                <div class="mx-auto w-16 h-16 mb-6 rounded-full bg-muted flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-8 w-8 text-muted-foreground"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                </div>
+                <h3 class="text-lg font-semibold mb-2">No hay documentos adjuntos</h3>
+                <p class="text-sm text-muted-foreground max-w-sm mx-auto">
+                  Este POA aún no tiene documentos adjuntos. Los documentos aparecerán aquí una vez que el cliente los suba.
+                </p>
               </div>
               <div v-else class="space-y-2">
                 <div
                   v-for="doc in documents"
                   :key="doc.id"
-                  class="flex items-center justify-between border rounded-lg p-3"
+                  class="flex items-center justify-between border rounded-lg p-3 hover:bg-muted/50 transition-colors"
                 >
-                  <div class="flex-1">
-                    <p class="font-medium">{{ doc.fileName }}</p>
-                    <p class="text-sm text-muted-foreground">
-                      {{ doc.description || 'Sin descripción' }} - {{ formatDate(doc.createdAt) }}
-                    </p>
+                  <div class="flex items-start gap-3 flex-1">
+                    <div class="w-10 h-10 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        class="h-5 w-5 text-primary"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="font-medium truncate">{{ doc.fileName }}</p>
+                      <p class="text-sm text-muted-foreground">
+                        {{ doc.description || doc.fileType || 'Sin descripción' }}
+                      </p>
+                      <p class="text-xs text-muted-foreground mt-1">
+                        Subido: {{ formatDate(doc.createdAt) }}
+                      </p>
+                    </div>
                   </div>
                   <div class="flex gap-2">
                     <Button variant="ghost" size="sm" as-child>
-                      <a :href="doc.fileUrl" target="_blank">Ver</a>
+                      <a :href="`http://localhost:3001${doc.fileUrl}`" target="_blank" title="Ver documento">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          class="h-4 w-4"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      </a>
                     </Button>
-                    <Button variant="ghost" size="sm" @click="handleDeleteDocument(doc.id)">
-                      Eliminar
+                    <Button variant="ghost" size="sm" @click="handleDeleteDocument(doc.id)" title="Eliminar documento">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        class="h-4 w-4"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M3 6h18"/>
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                      </svg>
                     </Button>
                   </div>
                 </div>
@@ -841,31 +1032,95 @@ const availableAdmins = computed(() => {
               <CardDescription>Historial de ejecuciones del POA</CardDescription>
             </CardHeader>
             <CardContent>
-              <div v-if="loadingExecutions" class="text-center py-8">
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+              <div v-if="loadingExecutions" class="text-center py-12">
+                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4"></div>
+                <p class="text-sm text-muted-foreground">Cargando ejecuciones...</p>
               </div>
-              <div v-else-if="executions.length === 0" class="text-center py-8 text-muted-foreground">
-                No hay ejecuciones registradas
+              <div v-else-if="executions.length === 0" class="text-center py-16">
+                <div class="mx-auto w-16 h-16 mb-6 rounded-full bg-muted flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-8 w-8 text-muted-foreground"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                </div>
+                <h3 class="text-lg font-semibold mb-2">No hay ejecuciones registradas</h3>
+                <p class="text-sm text-muted-foreground max-w-sm mx-auto">
+                  Este POA aún no ha sido ejecutado. Las ejecuciones aparecerán aquí una vez que el poder sea activado y utilizado.
+                </p>
               </div>
               <div v-else class="space-y-4">
                 <div
                   v-for="execution in executions"
                   :key="execution.id"
-                  class="border rounded-lg p-4 space-y-2"
+                  class="border rounded-lg p-4 space-y-3"
                 >
-                  <div class="flex items-center justify-between">
-                    <p class="font-medium">{{ execution.description }}</p>
-                    <Badge>{{ execution.status }}</Badge>
+                  <!-- Header con tipo y estado -->
+                  <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                      <div class="flex items-center gap-2 mb-2">
+                        <Badge variant="outline" class="capitalize">
+                          {{ execution.executionType.replace('_', ' ') }}
+                        </Badge>
+                        <Badge :variant="execution.status === 'completed' ? 'default' : 'secondary'">
+                          {{ execution.status }}
+                        </Badge>
+                      </div>
+                      <p class="font-medium">{{ execution.description }}</p>
+                    </div>
                   </div>
-                  <p class="text-sm text-muted-foreground">
-                    Ejecutado: {{ formatDate(execution.executionDate) }}
-                  </p>
-                  <p v-if="execution.outcome" class="text-sm">
-                    <span class="font-medium">Resultado:</span> {{ execution.outcome }}
-                  </p>
-                  <p v-if="execution.notes" class="text-sm text-muted-foreground">
-                    {{ execution.notes }}
-                  </p>
+
+                  <!-- Detalles de la ejecución -->
+                  <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div v-if="execution.amount">
+                      <p class="text-muted-foreground">Monto</p>
+                      <p class="font-medium">${{ execution.amount.toLocaleString() }}</p>
+                    </div>
+                    <div v-if="execution.recipient">
+                      <p class="text-muted-foreground">Destinatario</p>
+                      <p class="font-medium">{{ execution.recipient }}</p>
+                    </div>
+                    <div>
+                      <p class="text-muted-foreground">Ejecutado</p>
+                      <p class="font-medium">{{ formatDate(execution.executedAt) }}</p>
+                    </div>
+                    <div v-if="execution.executedByUser">
+                      <p class="text-muted-foreground">Ejecutado por</p>
+                      <p class="font-medium">
+                        {{ execution.executedByUser.firstName }} {{ execution.executedByUser.lastName }}
+                      </p>
+                    </div>
+                    <div v-if="execution.completedAt" class="col-span-2">
+                      <p class="text-muted-foreground">Completado</p>
+                      <p class="font-medium">{{ formatDate(execution.completedAt) }}</p>
+                    </div>
+                  </div>
+
+                  <!-- Documentos de prueba -->
+                  <div v-if="execution.proofDocuments && execution.proofDocuments.length > 0" class="text-sm">
+                    <p class="text-muted-foreground mb-1">Documentos de Prueba:</p>
+                    <ul class="list-disc list-inside space-y-1">
+                      <li v-for="(doc, idx) in execution.proofDocuments" :key="idx" class="text-xs">
+                        <a :href="doc" target="_blank" class="text-primary hover:underline">
+                          Documento {{ idx + 1 }}
+                        </a>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <!-- Notas -->
+                  <div v-if="execution.notes" class="text-sm">
+                    <p class="text-muted-foreground mb-1">Notas:</p>
+                    <p class="text-sm bg-muted p-2 rounded">{{ execution.notes }}</p>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -880,11 +1135,30 @@ const availableAdmins = computed(() => {
               <CardDescription>Auditoría completa de acciones</CardDescription>
             </CardHeader>
             <CardContent>
-              <div v-if="loadingHistory" class="text-center py-8">
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+              <div v-if="loadingHistory" class="text-center py-12">
+                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4"></div>
+                <p class="text-sm text-muted-foreground">Cargando historial...</p>
               </div>
-              <div v-else-if="history.length === 0" class="text-center py-8 text-muted-foreground">
-                No hay historial disponible
+              <div v-else-if="history.length === 0" class="text-center py-16">
+                <div class="mx-auto w-16 h-16 mb-6 rounded-full bg-muted flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-8 w-8 text-muted-foreground"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                </div>
+                <h3 class="text-lg font-semibold mb-2">No hay historial disponible</h3>
+                <p class="text-sm text-muted-foreground max-w-sm mx-auto">
+                  El historial de cambios aparecerá aquí a medida que se realicen acciones sobre este POA, como aprobaciones, rechazos o cambios de estado.
+                </p>
               </div>
               <div v-else class="space-y-4">
                 <div
@@ -1012,5 +1286,136 @@ const availableAdmins = computed(() => {
         </CardContent>
       </Card>
     </div>
+
+    <!-- Modal de Ejecución de Instrucción -->
+    <div v-if="showExecutionModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto">
+      <Card class="w-full max-w-2xl my-8">
+        <CardHeader>
+          <CardTitle>Ejecutar Instrucción del POA</CardTitle>
+          <CardDescription>Registre la ejecución de una instrucción del Poder Notarial</CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <!-- Tipo de Ejecución -->
+          <div class="space-y-2">
+            <Label for="executionType">Tipo de Ejecución *</Label>
+            <Select v-model="executionForm.executionType">
+              <SelectTrigger id="executionType">
+                <SelectValue placeholder="Seleccione el tipo de ejecución" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem :value="POAExecutionType.BANK_TRANSACTION">
+                  Transacción Bancaria
+                </SelectItem>
+                <SelectItem :value="POAExecutionType.DOCUMENT_DELIVERY">
+                  Entrega de Documentos
+                </SelectItem>
+                <SelectItem :value="POAExecutionType.PROPERTY_MANAGEMENT">
+                  Gestión de Propiedades
+                </SelectItem>
+                <SelectItem :value="POAExecutionType.OTHER">
+                  Otro
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <!-- Descripción -->
+          <div class="space-y-2">
+            <Label for="description">Descripción *</Label>
+            <Textarea
+              id="description"
+              v-model="executionForm.description"
+              placeholder="Describa detalladamente la instrucción ejecutada..."
+              rows="4"
+            />
+            <p class="text-xs text-muted-foreground">
+              Ejemplo: Transferencia de $5,000 desde cuenta XXXX1234 a beneficiaria María Pérez
+            </p>
+          </div>
+
+          <!-- Monto (opcional) -->
+          <div class="space-y-2">
+            <Label for="amount">Monto (opcional)</Label>
+            <Input
+              id="amount"
+              v-model.number="executionForm.amount"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Ej: 5000.00"
+            />
+            <p class="text-xs text-muted-foreground">
+              Ingrese el monto si la ejecución involucra una transacción financiera
+            </p>
+          </div>
+
+          <!-- Destinatario (opcional) -->
+          <div class="space-y-2">
+            <Label for="recipient">Destinatario (opcional)</Label>
+            <Input
+              id="recipient"
+              v-model="executionForm.recipient"
+              placeholder="Ej: María Pérez (Beneficiaria)"
+            />
+            <p class="text-xs text-muted-foreground">
+              Indique la persona o entidad que recibe el beneficio de esta ejecución
+            </p>
+          </div>
+
+          <!-- Documentos de Prueba (opcional) -->
+          <div class="space-y-2">
+            <Label for="proofDocs">URL de Documento de Prueba (opcional)</Label>
+            <Textarea
+              id="proofDocs"
+              v-model="proofDocumentUrl"
+              placeholder="https://ejemplo.com/documento1.pdf"
+              rows="2"
+            />
+            <p class="text-xs text-muted-foreground">
+              URL del documento que evidencia la ejecución (comprobante, confirmación, etc.)
+            </p>
+          </div>
+
+          <!-- Notas Adicionales (opcional) -->
+          <div class="space-y-2">
+            <Label for="notes">Notas Adicionales (opcional)</Label>
+            <Textarea
+              id="notes"
+              v-model="executionForm.notes"
+              placeholder="Notas adicionales sobre la ejecución..."
+              rows="3"
+            />
+          </div>
+
+          <!-- Botones de Acción -->
+          <div class="flex justify-end gap-2 pt-4">
+            <Button variant="outline" @click="showExecutionModal = false; resetExecutionForm()">
+              Cancelar
+            </Button>
+            <Button @click="handleExecuteInstruction">
+              Ejecutar Instrucción
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+
+    <!-- Modal de Confirmación Profesional -->
+    <AlertDialog :open="showConfirmDialog" @update:open="showConfirmDialog = $event">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{{ confirmDialogTitle }}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {{ confirmDialogDescription }}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction @click="handleConfirmAction">
+            Confirmar
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

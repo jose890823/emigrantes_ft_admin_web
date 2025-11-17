@@ -54,6 +54,16 @@ export enum POAHistoryAction {
 }
 
 /**
+ * Tipos de ejecución de POA
+ */
+export enum POAExecutionType {
+  BANK_TRANSACTION = 'bank_transaction',
+  DOCUMENT_DELIVERY = 'document_delivery',
+  PROPERTY_MANAGEMENT = 'property_management',
+  OTHER = 'other',
+}
+
+/**
  * Estados de ejecución de POA
  */
 export enum POAExecutionStatus {
@@ -176,17 +186,19 @@ export interface POAExecution {
   id: string
   poaId: string
   executedBy: string
-  executionDate: Date | string
-  status: POAExecutionStatus
+  executionType: POAExecutionType
   description: string
-  outcome?: string
-  notes?: string
-  createdAt: Date | string
+  amount?: number | null
+  recipient?: string | null
+  proofDocuments?: string[]
+  status: POAExecutionStatus
+  executedAt: Date | string
+  completedAt?: Date | string | null
+  notes?: string | null
   updatedAt: Date | string
 
   // Relaciones
   executedByUser?: POAUser
-  documents?: POADocument[]
 }
 
 // ============================================================================
@@ -252,7 +264,7 @@ export interface ReviewPOADto {
  * DTO para aprobar un POA
  */
 export interface ApprovePOADto {
-  notes?: string
+  adminNotes?: string
 }
 
 /**
@@ -267,24 +279,26 @@ export interface RejectPOADto {
  * DTO para notarizar un POA
  */
 export interface NotarizePOADto {
-  notarizedAt?: Date | string
-  notes?: string
+  notarizationNotes?: string
 }
 
 /**
  * DTO para activar un POA
  */
 export interface ActivatePOADto {
-  activatedAt?: Date | string
-  notes?: string
+  activationReason: string
+  activationDetails?: string
 }
 
 /**
  * DTO para ejecutar un POA
  */
 export interface ExecutePOADto {
+  executionType: POAExecutionType
   description: string
-  executionDate?: Date | string
+  amount?: number
+  recipient?: string
+  proofDocuments?: string[]
   notes?: string
 }
 

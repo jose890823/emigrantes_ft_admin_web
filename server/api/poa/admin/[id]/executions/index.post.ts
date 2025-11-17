@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const response = await $fetch(`${config.public.apiUrl}/poa/admin/${id}/executions`, {
+    const response = await $fetch(`${config.public.apiUrl}/poa/admin/${id}/execute`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -28,9 +28,13 @@ export default defineEventHandler(async (event) => {
 
     return response
   } catch (error: any) {
+    console.error('Error creating execution:', error)
+    const errorMessage = error.data?.message || error.message || 'Error al crear la ejecución'
+    const errorDetails = error.data?.error || error.data?.details || ''
+
     throw createError({
-      statusCode: error.statusCode || 500,
-      message: error.data?.message || 'Error al crear la ejecución',
+      statusCode: error.statusCode || error.status || 500,
+      message: errorDetails ? `${errorMessage}: ${errorDetails}` : errorMessage,
     })
   }
 })
