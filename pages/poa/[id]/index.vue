@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { usePoa } from '~/modules/poa/composables/usePoa'
 import { useUsers } from '~/modules/users/composables/useUsers'
+import { useMessages, MessageType, type CreateMessageDto } from '~/composables/useMessages'
 import { POAStatus, POAType, POAStatusLabels, POATypeLabels, POAStatusVariants, POAExecutionType } from '~/modules/poa/types'
 import type { POAHistory, POAExecution, POADocument, ExecutePOADto } from '~/modules/poa/types'
 import { Button } from '~/components/ui/button'
@@ -54,6 +55,16 @@ const {
 
 const { users, fetchUsers } = useUsers()
 
+const {
+  messages,
+  loading: loadingMessages,
+  fetchMessages,
+  sendMessage,
+  markAsRead,
+  deleteMessage,
+  refresh: refreshMessages,
+} = useMessages()
+
 // Estado local
 const activeTab = ref('details')
 const history = ref<POAHistory[]>([])
@@ -97,12 +108,21 @@ const selectedFile = ref<File | null>(null)
 const uploadDescription = ref('')
 const uploadingFile = ref(false)
 
+// Messages
+const showMessageModal = ref(false)
+const messageForm = ref<CreateMessageDto>({
+  type: MessageType.GENERAL,
+  subject: '',
+  message: '',
+})
+
 // Cargar datos al montar
 onMounted(async () => {
   await loadPOA()
   await loadHistory()
   await loadExecutions()
   await loadDocuments()
+  await loadMessages()
   await loadAdmins()
 })
 
@@ -155,6 +175,15 @@ const loadDocuments = async () => {
     documents.value = []
   } finally {
     loadingDocuments.value = false
+  }
+}
+
+// Cargar mensajes
+const loadMessages = async () => {
+  try {
+    await fetchMessages(poaId.value)
+  } catch (e) {
+    console.error('Error loading messages:', e)
   }
 }
 
@@ -408,6 +437,53 @@ const handleAssign = async () => {
     console.error('Error assigning POA:', e)
     alert(`Error al asignar el POA: ${e.message || 'Error desconocido'}`)
   }
+}
+
+// Manejar envío de mensaje
+const handleSendMessage = async () => {
+  if (!messageForm.value.subject.trim() || !messageForm.value.message.trim()) {
+    alert('El asunto y el mensaje son obligatorios')
+    return
+  }
+
+  try {
+    await sendMessage(poaId.value, messageForm.value)
+    showMessageModal.value = false
+    messageForm.value = {
+      type: MessageType.GENERAL,
+      subject: '',
+      message: '',
+    }
+    alert('Mensaje enviado exitosamente')
+  } catch (e: any) {
+    console.error('Error sending message:', e)
+    alert(`Error al enviar el mensaje: ${e.message || 'Error desconocido'}`)
+  }
+}
+
+// Manejar marcar como leído
+const handleMarkAsRead = async (messageId: string) => {
+  try {
+    await markAsRead(messageId)
+  } catch (e: any) {
+    console.error('Error marking message as read:', e)
+  }
+}
+
+// Manejar eliminar mensaje
+const handleDeleteMessage = async (messageId: string) => {
+  showConfirm(
+    'Eliminar mensaje',
+    '¿Estás seguro de eliminar este mensaje? Esta acción no se puede deshacer.',
+    async () => {
+      try {
+        await deleteMessage(messageId)
+      } catch (e: any) {
+        console.error('Error deleting message:', e)
+        alert(`Error al eliminar el mensaje: ${e.message || 'Error desconocido'}`)
+      }
+    }
+  )
 }
 
 // Manejar notarización
@@ -751,9 +827,10 @@ const availableAdmins = computed(() => {
 
       <!-- Tabs -->
       <Tabs :default-value="activeTab" @update:model-value="(val: string) => activeTab = val" class="w-full">
-        <TabsList class="grid w-full grid-cols-4">
+        <TabsList class="grid w-full grid-cols-5">
           <TabsTrigger value="details">Detalles</TabsTrigger>
           <TabsTrigger value="documents">Documentos</TabsTrigger>
+          <TabsTrigger value="messages">Mensajes</TabsTrigger>
           <TabsTrigger value="executions">Ejecuciones</TabsTrigger>
           <TabsTrigger value="history">Historial</TabsTrigger>
         </TabsList>
@@ -1160,11 +1237,11 @@ const availableAdmins = computed(() => {
                   El historial de cambios aparecerá aquí a medida que se realicen acciones sobre este POA, como aprobaciones, rechazos o cambios de estado.
                 </p>
               </div>
-              <div v-else class="space-y-4">
+              <div v-else class="space-y-3">
                 <div
                   v-for="item in history"
                   :key="item.id"
-                  class="border-l-2 border-primary pl-4 py-2"
+                  class="border rounded-lg p-4"
                 >
                   <div class="flex items-center justify-between">
                     <p class="font-medium">{{ item.action }}</p>
@@ -1174,6 +1251,161 @@ const availableAdmins = computed(() => {
                   <p v-if="item.performedByUser" class="text-sm text-muted-foreground mt-1">
                     Por: {{ item.performedByUser.firstName }} {{ item.performedByUser.lastName }}
                   </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <!-- Tab de Mensajes -->
+        <TabsContent value="messages">
+          <Card>
+            <CardHeader class="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Mensajes</CardTitle>
+                <CardDescription>Comunicación con el cliente sobre este POA</CardDescription>
+              </div>
+              <Button @click="showMessageModal = true" size="sm">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4 mr-2"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                Nuevo Mensaje
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div v-if="loadingMessages" class="text-center py-12">
+                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4"></div>
+                <p class="text-sm text-muted-foreground">Cargando mensajes...</p>
+              </div>
+              <div v-else-if="messages.length === 0" class="text-center py-16">
+                <div class="mx-auto w-16 h-16 mb-6 rounded-full bg-muted flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-8 w-8 text-muted-foreground"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                </div>
+                <h3 class="text-lg font-semibold mb-2">No hay mensajes</h3>
+                <p class="text-sm text-muted-foreground max-w-sm mx-auto">
+                  Aún no hay mensajes para este POA. Envía el primer mensaje al cliente haciendo clic en "Nuevo Mensaje".
+                </p>
+              </div>
+              <div v-else class="space-y-2 max-h-[600px] overflow-y-auto pr-2">
+                <div
+                  v-for="msg in messages"
+                  :key="msg.id"
+                  class="border rounded-lg p-3 transition-all hover:shadow-md"
+                  :class="{
+                    'bg-blue-50/50 border-blue-200 hover:bg-blue-50': msg.senderType === 'admin',
+                    'bg-slate-50/50 border-slate-200 hover:bg-slate-50': msg.senderType === 'client',
+                    'ring-2 ring-blue-200': !msg.isRead && msg.senderType === 'client'
+                  }"
+                >
+                  <!-- Header compacto en una línea -->
+                  <div class="flex items-center justify-between mb-2">
+                    <!-- Lado izquierdo: Emisor, estado y asunto -->
+                    <div class="flex items-center gap-2 flex-1 min-w-0">
+                      <Badge
+                        :variant="msg.senderType === 'admin' ? 'default' : 'secondary'"
+                        class="text-[10px] px-2 py-0.5 font-medium flex-shrink-0"
+                      >
+                        {{ msg.senderType === 'admin' ? 'Admin' : 'Cliente' }}
+                      </Badge>
+                      <Badge
+                        v-if="!msg.isRead && msg.senderType === 'client'"
+                        variant="destructive"
+                        class="text-[10px] px-2 py-0.5 animate-pulse flex-shrink-0"
+                      >
+                        Nuevo
+                      </Badge>
+                      <span
+                        class="font-semibold text-sm truncate"
+                        :class="{ 'text-primary': !msg.isRead && msg.senderType === 'client' }"
+                        :title="msg.subject"
+                      >
+                        {{ msg.subject }}
+                      </span>
+                    </div>
+
+                    <!-- Lado derecho: Tipo y fecha -->
+                    <div class="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                      <Badge variant="outline" class="text-[10px] px-2 py-0.5 hidden sm:inline-flex">
+                        {{ msg.type === 'request_document' ? 'Doc' :
+                           msg.type === 'status_update' ? 'Estado' :
+                           msg.type === 'question' ? 'Pregunta' : 'General' }}
+                      </Badge>
+                      <span class="text-[11px] text-muted-foreground whitespace-nowrap">
+                        {{ new Date(msg.createdAt).toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Mensaje -->
+                  <p class="text-xs whitespace-pre-wrap text-foreground/80 leading-relaxed mb-2 line-clamp-3">
+                    {{ msg.message }}
+                  </p>
+
+                  <!-- Footer compacto -->
+                  <div class="flex items-center justify-between pt-2 border-t border-border/50">
+                    <div v-if="msg.sender" class="text-[10px] text-muted-foreground truncate flex-1 min-w-0">
+                      <span class="font-medium">De:</span>
+                      {{ msg.sender.firstName }} {{ msg.sender.lastName }}
+                    </div>
+                    <div class="flex items-center gap-1 flex-shrink-0 ml-2">
+                      <!-- Botón marcar como leído (solo mensajes del cliente) -->
+                      <Button
+                        v-if="!msg.isRead && msg.senderType === 'client'"
+                        size="sm"
+                        variant="ghost"
+                        @click="handleMarkAsRead(msg.id)"
+                        class="text-[10px] h-6 px-2"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          class="h-3 w-3 mr-1"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        Leído
+                      </Button>
+                      <!-- Botón eliminar (solo mensajes del admin no leídos) -->
+                      <Button
+                        v-if="!msg.isRead && msg.senderType === 'admin'"
+                        size="sm"
+                        variant="ghost"
+                        @click="handleDeleteMessage(msg.id)"
+                        class="text-[10px] h-6 px-2 text-destructive hover:text-destructive"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          class="h-3 w-3 mr-1"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
+                          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                        Eliminar
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -1417,5 +1649,51 @@ const availableAdmins = computed(() => {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    <!-- Modal de Nuevo Mensaje -->
+    <div v-if="showMessageModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <Card class="w-full max-w-2xl">
+        <CardHeader>
+          <CardTitle>Enviar Mensaje al Cliente</CardTitle>
+          <CardDescription>Comunicarse con el cliente sobre este POA</CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <div>
+            <Label>Tipo de Mensaje *</Label>
+            <Select v-model="messageForm.type">
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccione el tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem :value="MessageType.GENERAL">General</SelectItem>
+                <SelectItem :value="MessageType.REQUEST_DOCUMENT">Solicitud de Documento</SelectItem>
+                <SelectItem :value="MessageType.STATUS_UPDATE">Actualización de Estado</SelectItem>
+                <SelectItem :value="MessageType.QUESTION">Pregunta</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Asunto *</Label>
+            <Input
+              v-model="messageForm.subject"
+              placeholder="Ej: Documentos adicionales requeridos"
+              maxlength="255"
+            />
+          </div>
+          <div>
+            <Label>Mensaje *</Label>
+            <Textarea
+              v-model="messageForm.message"
+              placeholder="Escriba su mensaje aquí..."
+              rows="6"
+            />
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="outline" @click="showMessageModal = false">Cancelar</Button>
+            <Button @click="handleSendMessage">Enviar Mensaje</Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   </div>
 </template>
