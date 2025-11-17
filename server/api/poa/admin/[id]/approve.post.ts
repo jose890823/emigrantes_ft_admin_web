@@ -28,9 +28,13 @@ export default defineEventHandler(async (event) => {
 
     return response
   } catch (error: any) {
+    console.error('Error al aprobar POA:', error)
+    const errorMessage = error.data?.message || error.message || 'Error al aprobar el POA'
+    const errorDetails = error.data?.error || error.data?.details || ''
+
     throw createError({
-      statusCode: error.statusCode || 500,
-      message: error.data?.message || 'Error al aprobar el POA',
+      statusCode: error.statusCode || error.status || 500,
+      message: errorDetails ? `${errorMessage}: ${errorDetails}` : errorMessage,
     })
   }
 })

@@ -26,6 +26,16 @@ export default defineEventHandler(async (event) => {
 
     return response
   } catch (error: any) {
+    // Si el endpoint no existe (404), devolver array vacío
+    // La funcionalidad de documentos no está implementada en el backend aún
+    if (error.statusCode === 404 || error.status === 404) {
+      return {
+        success: true,
+        data: [],
+        message: 'La gestión de documentos no está implementada aún',
+      }
+    }
+
     throw createError({
       statusCode: error.statusCode || 500,
       message: error.data?.message || 'Error al obtener los documentos',
