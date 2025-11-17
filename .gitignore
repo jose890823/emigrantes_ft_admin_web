@@ -25,3 +25,8 @@ logs
 
 # Test coverage
 coverage
+
+# Archivos temporales
+files/
+scripts/
+.claude/admin_web/errores/*.png
