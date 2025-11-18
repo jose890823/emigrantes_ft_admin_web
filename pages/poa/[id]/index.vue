@@ -3,7 +3,9 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { usePoa } from '~/modules/poa/composables/usePoa'
 import { useUsers } from '~/modules/users/composables/useUsers'
-import { useMessages, MessageType, type CreateMessageDto } from '~/composables/useMessages'
+import { useMessages, type CreateMessageDto } from '~/composables/useMessages'
+import { useThreads, type CreateThreadDto, type CreateMessageInThreadDto } from '~/composables/useThreads'
+import { MessageType, ThreadType, ThreadStatus, MessageSenderType } from '~/types/poa-messages'
 import { POAStatus, POAType, POAStatusLabels, POATypeLabels, POAStatusVariants, POAExecutionType } from '~/modules/poa/types'
 import type { POAHistory, POAExecution, POADocument, ExecutePOADto } from '~/modules/poa/types'
 import { Button } from '~/components/ui/button'
@@ -65,6 +67,20 @@ const {
   refresh: refreshMessages,
 } = useMessages()
 
+const {
+  threads,
+  currentThread,
+  loading: loadingThreads,
+  error: threadsError,
+  fetchThreads,
+  fetchThread,
+  createThread,
+  sendMessage: sendThreadMessage,
+  markThreadAsRead,
+  closeThread,
+  reopenThread,
+} = useThreads()
+
 // Estado local
 const activeTab = ref('details')
 const history = ref<POAHistory[]>([])
@@ -108,11 +124,23 @@ const selectedFile = ref<File | null>(null)
 const uploadDescription = ref('')
 const uploadingFile = ref(false)
 
-// Messages
+// Messages (legacy)
 const showMessageModal = ref(false)
 const messageForm = ref<CreateMessageDto>({
   type: MessageType.GENERAL,
   subject: '',
+  message: '',
+})
+
+// Threads
+const showCreateThreadModal = ref(false)
+const showThreadDetailModal = ref(false)
+const selectedThreadId = ref<string | null>(null)
+const threadForm = ref<CreateThreadDto>({
+  type: ThreadType.GENERAL,
+  subject: '',
+})
+const threadMessageForm = ref<CreateMessageInThreadDto>({
   message: '',
 })
 
@@ -123,6 +151,7 @@ onMounted(async () => {
   await loadExecutions()
   await loadDocuments()
   await loadMessages()
+  await loadThreads()
   await loadAdmins()
 })
 
@@ -184,6 +213,15 @@ const loadMessages = async () => {
     await fetchMessages(poaId.value)
   } catch (e) {
     console.error('Error loading messages:', e)
+  }
+}
+
+// Cargar hilos
+const loadThreads = async () => {
+  try {
+    await fetchThreads(poaId.value)
+  } catch (e) {
+    console.error('Error loading threads:', e)
   }
 }
 
@@ -484,6 +522,103 @@ const handleDeleteMessage = async (messageId: string) => {
       }
     }
   )
+}
+
+// ============================================
+// THREAD HANDLERS
+// ============================================
+
+// Crear nuevo hilo
+const handleCreateThread = async () => {
+  if (!threadForm.value.subject.trim()) {
+    alert('El asunto del hilo es obligatorio')
+    return
+  }
+
+  try {
+    await createThread(poaId.value, threadForm.value)
+    showCreateThreadModal.value = false
+    threadForm.value = {
+      type: ThreadType.GENERAL,
+      subject: '',
+    }
+    alert('Hilo creado exitosamente')
+  } catch (e: any) {
+    console.error('Error creating thread:', e)
+    alert(`Error al crear el hilo: ${e.message || 'Error desconocido'}`)
+  }
+}
+
+// Abrir hilo para ver mensajes
+const handleOpenThread = async (threadId: string) => {
+  try {
+    selectedThreadId.value = threadId
+    await fetchThread(threadId)
+    showThreadDetailModal.value = true
+
+    // Marcar como leído si tiene mensajes no leídos del cliente
+    const thread = threads.value.find(t => t.id === threadId)
+    if (thread && thread.unreadCount > 0) {
+      await markThreadAsRead(threadId)
+    }
+  } catch (e: any) {
+    console.error('Error opening thread:', e)
+    alert(`Error al abrir el hilo: ${e.message || 'Error desconocido'}`)
+  }
+}
+
+// Enviar mensaje en hilo
+const handleSendThreadMessage = async () => {
+  if (!selectedThreadId.value || !threadMessageForm.value.message.trim()) {
+    alert('El mensaje es obligatorio')
+    return
+  }
+
+  try {
+    await sendThreadMessage(selectedThreadId.value, threadMessageForm.value)
+    threadMessageForm.value = { message: '' }
+
+    // Recargar hilo para ver el nuevo mensaje
+    await fetchThread(selectedThreadId.value)
+  } catch (e: any) {
+    console.error('Error sending message:', e)
+    alert(`Error al enviar el mensaje: ${e.message || 'Error desconocido'}`)
+  }
+}
+
+// Cerrar hilo
+const handleCloseThread = async (threadId: string) => {
+  showConfirm(
+    'Cerrar hilo',
+    '¿Está seguro de cerrar este hilo? No se podrán enviar más mensajes.',
+    async () => {
+      try {
+        await closeThread(threadId)
+
+        // Si está abierto el hilo, cerrarlo
+        if (selectedThreadId.value === threadId) {
+          showThreadDetailModal.value = false
+          selectedThreadId.value = null
+        }
+
+        alert('Hilo cerrado exitosamente')
+      } catch (e: any) {
+        console.error('Error closing thread:', e)
+        alert(`Error al cerrar el hilo: ${e.message || 'Error desconocido'}`)
+      }
+    }
+  )
+}
+
+// Reabrir hilo
+const handleReopenThread = async (threadId: string) => {
+  try {
+    await reopenThread(threadId)
+    alert('Hilo reabierto exitosamente')
+  } catch (e: any) {
+    console.error('Error reopening thread:', e)
+    alert(`Error al reabrir el hilo: ${e.message || 'Error desconocido'}`)
+  }
 }
 
 // Manejar notarización
@@ -1262,29 +1397,45 @@ const availableAdmins = computed(() => {
           <Card>
             <CardHeader class="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Mensajes</CardTitle>
-                <CardDescription>Comunicación con el cliente sobre este POA</CardDescription>
+                <CardTitle>Hilos de Conversación</CardTitle>
+                <CardDescription>Comunicación organizada por temas con el cliente</CardDescription>
               </div>
-              <Button @click="showMessageModal = true" size="sm">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-4 w-4 mr-2"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
-                Nuevo Mensaje
-              </Button>
+              <div class="flex gap-2">
+                <Button @click="loadThreads" variant="outline" size="sm" :disabled="loadingThreads">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-4 w-4 mr-2"
+                    :class="{ 'animate-spin': loadingThreads }"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  </svg>
+                  Refrescar
+                </Button>
+                <Button @click="showCreateThreadModal = true" size="sm">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-4 w-4 mr-2"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                  Nuevo Hilo
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <div v-if="loadingMessages" class="text-center py-12">
+              <div v-if="loadingThreads" class="text-center py-12">
                 <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4"></div>
-                <p class="text-sm text-muted-foreground">Cargando mensajes...</p>
+                <p class="text-sm text-muted-foreground">Cargando hilos...</p>
               </div>
-              <div v-else-if="messages.length === 0" class="text-center py-16">
+              <div v-else-if="threads.length === 0" class="text-center py-16">
                 <div class="mx-auto w-16 h-16 mb-6 rounded-full bg-muted flex items-center justify-center">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -1297,114 +1448,86 @@ const availableAdmins = computed(() => {
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                   </svg>
                 </div>
-                <h3 class="text-lg font-semibold mb-2">No hay mensajes</h3>
+                <h3 class="text-lg font-semibold mb-2">No hay hilos de conversación</h3>
                 <p class="text-sm text-muted-foreground max-w-sm mx-auto">
-                  Aún no hay mensajes para este POA. Envía el primer mensaje al cliente haciendo clic en "Nuevo Mensaje".
+                  Aún no hay hilos de conversación para este POA. Crea el primer hilo haciendo clic en "Nuevo Hilo".
                 </p>
               </div>
-              <div v-else class="space-y-2 max-h-[600px] overflow-y-auto pr-2">
+              <div v-else class="space-y-2">
                 <div
-                  v-for="msg in messages"
-                  :key="msg.id"
-                  class="border rounded-lg p-3 transition-all hover:shadow-md"
+                  v-for="thread in threads"
+                  :key="thread.id"
+                  class="border rounded-lg p-4 transition-all hover:shadow-md cursor-pointer"
                   :class="{
-                    'bg-blue-50/50 border-blue-200 hover:bg-blue-50': msg.senderType === 'admin',
-                    'bg-slate-50/50 border-slate-200 hover:bg-slate-50': msg.senderType === 'client',
-                    'ring-2 ring-blue-200': !msg.isRead && msg.senderType === 'client'
+                    'bg-blue-50/30 border-blue-200': thread.status === 'open',
+                    'bg-gray-50/30 border-gray-200': thread.status === 'closed',
+                    'ring-2 ring-blue-300': thread.unreadCount > 0
                   }"
+                  @click="handleOpenThread(thread.id)"
                 >
-                  <!-- Header compacto en una línea -->
-                  <div class="flex items-center justify-between mb-2">
-                    <!-- Lado izquierdo: Emisor, estado y asunto -->
-                    <div class="flex items-center gap-2 flex-1 min-w-0">
-                      <Badge
-                        :variant="msg.senderType === 'admin' ? 'default' : 'secondary'"
-                        class="text-[10px] px-2 py-0.5 font-medium flex-shrink-0"
-                      >
-                        {{ msg.senderType === 'admin' ? 'Admin' : 'Cliente' }}
-                      </Badge>
-                      <Badge
-                        v-if="!msg.isRead && msg.senderType === 'client'"
-                        variant="destructive"
-                        class="text-[10px] px-2 py-0.5 animate-pulse flex-shrink-0"
-                      >
-                        Nuevo
-                      </Badge>
-                      <span
-                        class="font-semibold text-sm truncate"
-                        :class="{ 'text-primary': !msg.isRead && msg.senderType === 'client' }"
-                        :title="msg.subject"
-                      >
-                        {{ msg.subject }}
-                      </span>
-                    </div>
-
-                    <!-- Lado derecho: Tipo y fecha -->
-                    <div class="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                      <Badge variant="outline" class="text-[10px] px-2 py-0.5 hidden sm:inline-flex">
-                        {{ msg.type === 'request_document' ? 'Doc' :
-                           msg.type === 'status_update' ? 'Estado' :
-                           msg.type === 'question' ? 'Pregunta' : 'General' }}
-                      </Badge>
-                      <span class="text-[11px] text-muted-foreground whitespace-nowrap">
-                        {{ new Date(msg.createdAt).toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}
-                      </span>
+                  <!-- Header -->
+                  <div class="flex items-start justify-between mb-2">
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-2 mb-1">
+                        <Badge
+                          :variant="thread.status === 'open' ? 'default' : 'secondary'"
+                          class="text-xs"
+                        >
+                          {{ thread.status === 'open' ? 'Abierto' : 'Cerrado' }}
+                        </Badge>
+                        <Badge variant="outline" class="text-xs">
+                          {{ thread.type === 'general' ? 'General' :
+                             thread.type === 'question' ? 'Pregunta' :
+                             thread.type === 'request_document' ? 'Documentos' :
+                             'Actualización' }}
+                        </Badge>
+                        <Badge v-if="thread.unreadCount > 0" variant="destructive" class="text-xs animate-pulse">
+                          {{ thread.unreadCount }} nuevos
+                        </Badge>
+                      </div>
+                      <h4 class="font-semibold text-sm truncate" :title="thread.subject">
+                        {{ thread.subject }}
+                      </h4>
                     </div>
                   </div>
 
-                  <!-- Mensaje -->
-                  <p class="text-xs whitespace-pre-wrap text-foreground/80 leading-relaxed mb-2 line-clamp-3">
-                    {{ msg.message }}
-                  </p>
+                  <!-- Stats -->
+                  <div class="flex items-center gap-4 text-xs text-muted-foreground mt-3">
+                    <div class="flex items-center gap-1">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                      </svg>
+                      {{ thread.messageCount }} mensajes
+                    </div>
+                    <div v-if="thread.lastMessageAt" class="flex items-center gap-1">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12 6 12 12 16 14"/>
+                      </svg>
+                      {{ new Date(thread.lastMessageAt).toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}
+                    </div>
+                  </div>
 
-                  <!-- Footer compacto -->
-                  <div class="flex items-center justify-between pt-2 border-t border-border/50">
-                    <div v-if="msg.sender" class="text-[10px] text-muted-foreground truncate flex-1 min-w-0">
-                      <span class="font-medium">De:</span>
-                      {{ msg.sender.firstName }} {{ msg.sender.lastName }}
-                    </div>
-                    <div class="flex items-center gap-1 flex-shrink-0 ml-2">
-                      <!-- Botón marcar como leído (solo mensajes del cliente) -->
-                      <Button
-                        v-if="!msg.isRead && msg.senderType === 'client'"
-                        size="sm"
-                        variant="ghost"
-                        @click="handleMarkAsRead(msg.id)"
-                        class="text-[10px] h-6 px-2"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          class="h-3 w-3 mr-1"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2"
-                        >
-                          <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                        Leído
-                      </Button>
-                      <!-- Botón eliminar (solo mensajes del admin no leídos) -->
-                      <Button
-                        v-if="!msg.isRead && msg.senderType === 'admin'"
-                        size="sm"
-                        variant="ghost"
-                        @click="handleDeleteMessage(msg.id)"
-                        class="text-[10px] h-6 px-2 text-destructive hover:text-destructive"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          class="h-3 w-3 mr-1"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2"
-                        >
-                          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                        </svg>
-                        Eliminar
-                      </Button>
-                    </div>
+                  <!-- Actions -->
+                  <div class="flex items-center gap-2 mt-3 pt-3 border-t" @click.stop>
+                    <Button
+                      v-if="thread.status === 'open'"
+                      size="sm"
+                      variant="ghost"
+                      @click="handleCloseThread(thread.id)"
+                      class="text-xs h-7"
+                    >
+                      Cerrar
+                    </Button>
+                    <Button
+                      v-else
+                      size="sm"
+                      variant="ghost"
+                      @click="handleReopenThread(thread.id)"
+                      class="text-xs h-7"
+                    >
+                      Reabrir
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -1650,7 +1773,7 @@ const availableAdmins = computed(() => {
       </AlertDialogContent>
     </AlertDialog>
 
-    <!-- Modal de Nuevo Mensaje -->
+    <!-- Modal de Nuevo Mensaje (Legacy - mantener por compatibilidad) -->
     <div v-if="showMessageModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <Card class="w-full max-w-2xl">
         <CardHeader>
@@ -1693,6 +1816,157 @@ const availableAdmins = computed(() => {
             <Button @click="handleSendMessage">Enviar Mensaje</Button>
           </div>
         </CardContent>
+      </Card>
+    </div>
+
+    <!-- Modal de Crear Nuevo Hilo -->
+    <div v-if="showCreateThreadModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <Card class="w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Crear Nuevo Hilo</CardTitle>
+          <CardDescription>Inicia una nueva conversación con el cliente</CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <div>
+            <Label>Tipo de Hilo *</Label>
+            <Select v-model="threadForm.type">
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccione el tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem :value="ThreadType.GENERAL">General</SelectItem>
+                <SelectItem :value="ThreadType.REQUEST_DOCUMENT">Solicitud de Documento</SelectItem>
+                <SelectItem :value="ThreadType.STATUS_UPDATE">Actualización de Estado</SelectItem>
+                <SelectItem :value="ThreadType.QUESTION">Pregunta</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Asunto *</Label>
+            <Input
+              v-model="threadForm.subject"
+              placeholder="Ej: Documentos adicionales requeridos"
+              maxlength="255"
+            />
+            <p class="text-xs text-muted-foreground mt-1">
+              Este será el tema principal del hilo de conversación
+            </p>
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="outline" @click="showCreateThreadModal = false">Cancelar</Button>
+            <Button @click="handleCreateThread">Crear Hilo</Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+
+    <!-- Modal de Detalle del Hilo -->
+    <div v-if="showThreadDetailModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <Card class="w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <CardHeader class="flex-shrink-0">
+          <div class="flex items-start justify-between">
+            <div class="flex-1">
+              <div class="flex items-center gap-2 mb-2">
+                <Badge :variant="currentThread?.status === 'open' ? 'default' : 'secondary'">
+                  {{ currentThread?.status === 'open' ? 'Abierto' : 'Cerrado' }}
+                </Badge>
+                <Badge variant="outline">
+                  {{ currentThread?.type === 'general' ? 'General' :
+                     currentThread?.type === 'question' ? 'Pregunta' :
+                     currentThread?.type === 'request_document' ? 'Documentos' :
+                     'Actualización' }}
+                </Badge>
+              </div>
+              <CardTitle>{{ currentThread?.subject }}</CardTitle>
+              <CardDescription class="mt-1">
+                {{ currentThread?.messageCount || 0 }} mensajes •
+                Creado {{ currentThread?.createdAt ? formatDate(currentThread.createdAt) : '' }}
+              </CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" @click="showThreadDetailModal = false">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6 6 18M6 6l12 12"/>
+              </svg>
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent class="flex-1 overflow-y-auto space-y-3 min-h-0">
+          <div v-if="!currentThread?.messages || currentThread.messages.length === 0" class="text-center py-12">
+            <div class="mx-auto w-16 h-16 mb-4 rounded-full bg-muted flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </div>
+            <p class="text-sm text-muted-foreground">No hay mensajes en este hilo aún.</p>
+            <p class="text-xs text-muted-foreground mt-1">Envía el primer mensaje para iniciar la conversación.</p>
+          </div>
+
+          <div v-else class="space-y-3">
+            <div
+              v-for="msg in currentThread.messages"
+              :key="msg.id"
+              class="flex"
+              :class="msg.senderType === 'admin' ? 'justify-end' : 'justify-start'"
+            >
+              <div
+                class="max-w-[70%] rounded-lg p-3 shadow-sm"
+                :class="{
+                  'bg-blue-500 text-white': msg.senderType === 'admin',
+                  'bg-gray-100': msg.senderType === 'client'
+                }"
+              >
+                <div class="flex items-center gap-2 mb-1">
+                  <Badge
+                    :variant="msg.senderType === 'admin' ? 'secondary' : 'outline'"
+                    class="text-[10px] px-2 py-0.5"
+                    :class="msg.senderType === 'admin' ? 'bg-blue-600 text-white border-blue-600' : ''"
+                  >
+                    {{ msg.senderType === 'admin' ? 'Admin' : 'Cliente' }}
+                  </Badge>
+                  <span class="text-[10px]" :class="msg.senderType === 'admin' ? 'text-blue-100' : 'text-muted-foreground'">
+                    {{ new Date(msg.createdAt).toLocaleString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}
+                  </span>
+                </div>
+                <p class="text-sm whitespace-pre-wrap">{{ msg.message }}</p>
+                <div v-if="msg.sender" class="text-[10px] mt-2 pt-2 border-t" :class="msg.senderType === 'admin' ? 'border-blue-400 text-blue-100' : 'border-border text-muted-foreground'">
+                  {{ msg.sender.firstName }} {{ msg.sender.lastName }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+
+        <div v-if="currentThread?.status === 'open'" class="flex-shrink-0 border-t p-4">
+          <div class="flex gap-2">
+            <Textarea
+              v-model="threadMessageForm.message"
+              placeholder="Escribe tu mensaje..."
+              rows="3"
+              class="flex-1"
+              @keydown.ctrl.enter="handleSendThreadMessage"
+            />
+            <Button
+              @click="handleSendThreadMessage"
+              :disabled="!threadMessageForm.message.trim()"
+              class="self-end"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+              Enviar
+            </Button>
+          </div>
+          <p class="text-xs text-muted-foreground mt-2">
+            Presiona Ctrl + Enter para enviar
+          </p>
+        </div>
+        <div v-else class="flex-shrink-0 border-t p-4 bg-muted/50">
+          <p class="text-sm text-center text-muted-foreground">
+            Este hilo está cerrado. Reábrelo para continuar la conversación.
+          </p>
+        </div>
       </Card>
     </div>
   </div>

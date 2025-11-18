@@ -1,37 +1,7 @@
 import { ref, type Ref } from 'vue'
 import { useAuth } from '~/modules/auth/composables/useAuth'
-
-export enum MessageType {
-  REQUEST_DOCUMENT = 'request_document',
-  GENERAL = 'general',
-  STATUS_UPDATE = 'status_update',
-  QUESTION = 'question',
-}
-
-export enum MessageSenderType {
-  ADMIN = 'admin',
-  CLIENT = 'client',
-}
-
-export interface POAMessage {
-  id: string
-  poaId: string
-  senderId: string
-  senderType: MessageSenderType
-  type: MessageType
-  subject: string
-  message: string
-  isRead: boolean
-  readAt: Date | null
-  createdAt: Date
-  updatedAt: Date
-  sender?: {
-    id: string
-    firstName: string
-    lastName: string
-    email: string
-  }
-}
+import type { POAMessage } from '~/types/poa-messages'
+import { MessageType, MessageSenderType } from '~/types/poa-messages'
 
 export interface CreateMessageDto {
   type: MessageType
