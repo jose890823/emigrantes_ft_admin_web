@@ -74,6 +74,13 @@ const getInitialValues = () => {
     }
   })
 
+  console.log('🔨 DynamicForm - getInitialValues:', {
+    hasInitialValues: !!props.initialValues,
+    isActive: values.isActive,
+    emailVerified: values.emailVerified,
+    phoneVerified: values.phoneVerified,
+  })
+
   return values
 }
 
@@ -206,8 +213,8 @@ watch(values, (newValues) => {
               <Switch
                 :id="field.name"
                 :disabled="field.disabled || loading"
-                :checked="componentField.modelValue"
-                @update:checked="componentField['onUpdate:modelValue']"
+                :modelValue="!!componentField.modelValue"
+                @update:modelValue="componentField['onUpdate:modelValue']"
                 :class="field.class"
               />
               <label

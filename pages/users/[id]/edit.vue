@@ -61,8 +61,11 @@ const validationSchema = z.object({
   }
 )
 
-// Configuración de campos del formulario
-const formFields: FormFieldConfig[] = [
+// Verificar si el usuario actual es super_admin
+const isSuperAdmin = computed(() => authUser.value?.role === 'super_admin')
+
+// Configuración de campos del formulario (reactivo)
+const formFields = computed<FormFieldConfig[]>(() => [
   {
     name: 'firstName',
     label: 'Nombre',
@@ -117,27 +120,23 @@ const formFields: FormFieldConfig[] = [
     name: 'isActive',
     label: 'Usuario Activo',
     type: 'switch',
-    defaultValue: true,
     description: 'Habilitar o deshabilitar el acceso del usuario',
   },
   {
     name: 'emailVerified',
     label: 'Email Verificado',
     type: 'switch',
-    defaultValue: false,
-    description: 'Marcar email como verificado',
+    description: 'Marcar email como verificado (solo super admin)',
+    hidden: !isSuperAdmin.value,
   },
   {
     name: 'phoneVerified',
     label: 'Teléfono Verificado',
     type: 'switch',
-    defaultValue: false,
-    description: 'Marcar teléfono como verificado',
+    description: 'Marcar teléfono como verificado (solo super admin)',
+    hidden: !isSuperAdmin.value,
   },
-]
-
-// Verificar si el usuario actual es super_admin
-const isSuperAdmin = computed(() => authUser.value?.role === 'super_admin')
+])
 
 // Valores iniciales (se llenarán al cargar el usuario)
 const initialValues = ref({
@@ -159,6 +158,12 @@ onMounted(async () => {
   try {
     const user = await fetchUser(userId.value)
     if (user) {
+      console.log('📥 User data loaded:', {
+        isActive: user.isActive,
+        emailVerified: user.emailVerified,
+        phoneVerified: user.phoneVerified,
+      })
+
       initialValues.value = {
         email: user.email,
         password: '',
@@ -171,6 +176,12 @@ onMounted(async () => {
         emailVerified: user.emailVerified || false,
         phoneVerified: user.phoneVerified || false,
       }
+
+      console.log('📝 Initial values set:', {
+        isActive: initialValues.value.isActive,
+        emailVerified: initialValues.value.emailVerified,
+        phoneVerified: initialValues.value.phoneVerified,
+      })
     }
   } catch (e) {
     console.error('Error loading user:', e)
@@ -183,6 +194,12 @@ onMounted(async () => {
 const handleSubmit = async (values: any) => {
   clearError()
 
+  console.log('📤 Form values submitted:', {
+    isActive: values.isActive,
+    emailVerified: values.emailVerified,
+    phoneVerified: values.phoneVerified,
+  })
+
   try {
     // Preparar datos para actualizar
     const { confirmPassword, password, ...userData } = values
@@ -193,7 +210,19 @@ const handleSubmit = async (values: any) => {
       ...(password && password.length > 0 ? { password } : {}),
     }
 
+    console.log('📦 Data being sent to API:', {
+      isActive: updateData.isActive,
+      emailVerified: updateData.emailVerified,
+      phoneVerified: updateData.phoneVerified,
+    })
+
     const updatedUser = await updateUser(userId.value, updateData)
+
+    console.log('✅ Updated user received:', {
+      isActive: updatedUser?.isActive,
+      emailVerified: updatedUser?.emailVerified,
+      phoneVerified: updatedUser?.phoneVerified,
+    })
 
     if (updatedUser) {
       // Redirigir a la lista de usuarios
@@ -283,10 +312,11 @@ const goBack = () => {
     <!-- Formulario -->
     <div v-else class="rounded-lg border p-6">
       <DynamicForm
-        :key="userId"
+        v-if="currentUser && initialValues.email"
+        :key="`form-${userId}-${Date.now()}`"
         :fields="formFields"
         :validation-schema="validationSchema"
-        :initial-values="initialValues"
+        :initial-values="{ ...initialValues }"
         :loading="loading"
         :columns="2"
         submit-text="Actualizar Usuario"
@@ -295,6 +325,9 @@ const goBack = () => {
         @submit="handleSubmit"
         @cancel="handleCancel"
       />
+      <div v-else-if="!currentUser" class="text-center py-8 text-muted-foreground">
+        No se pudo cargar el usuario
+      </div>
     </div>
   </div>
 </template>

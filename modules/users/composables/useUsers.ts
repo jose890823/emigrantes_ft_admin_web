@@ -147,11 +147,24 @@ export const useUsers = () => {
     loading.value = true
     error.value = null
 
+    console.log('🔧 useUsers.updateUser - Data to send:', {
+      isActive: data.isActive,
+      emailVerified: data.emailVerified,
+      phoneVerified: data.phoneVerified,
+    })
+
     try {
       const response = await $fetch<UserResponse>(`/api/users/${id}`, {
         method: 'PUT',
         body: data,
         headers: getAuthHeaders(),
+      })
+
+      console.log('🔧 useUsers.updateUser - Response:', {
+        success: response.success,
+        isActive: response.data?.isActive,
+        emailVerified: response.data?.emailVerified,
+        phoneVerified: response.data?.phoneVerified,
       })
 
       if (response.success && response.data) {
