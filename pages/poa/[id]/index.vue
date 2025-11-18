@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { usePoa } from '~/modules/poa/composables/usePoa'
 import { useUsers } from '~/modules/users/composables/useUsers'
@@ -154,6 +154,20 @@ onMounted(async () => {
   await loadThreads()
   await loadAdmins()
 })
+
+// Debug: watch threads changes
+watch(threads, (newThreads) => {
+  console.log('🔍 [DEBUG] Threads changed:', {
+    count: newThreads.length,
+    threads: newThreads.map(t => ({
+      id: t.id,
+      subject: t.subject,
+      type: t.type,
+      status: t.status,
+      messageCount: t.messageCount
+    }))
+  })
+}, { deep: true })
 
 // Cargar POA
 const loadPOA = async () => {
@@ -1485,8 +1499,8 @@ const availableAdmins = computed(() => {
                           {{ thread.unreadCount }} nuevos
                         </Badge>
                       </div>
-                      <h4 class="font-semibold text-sm truncate" :title="thread.subject">
-                        {{ thread.subject }}
+                      <h4 class="font-semibold text-sm truncate" :title="thread.subject || 'Sin título'">
+                        {{ thread.subject || '(Sin título)' }}
                       </h4>
                     </div>
                   </div>

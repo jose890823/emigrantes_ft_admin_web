@@ -24,7 +24,9 @@ export default defineEventHandler(async (event) => {
       },
     })
 
-    return response
+    // El backend retorna { success: true, data: [...] }
+    // Extraer solo el array de threads
+    return (response as any).data || response
   } catch (error: any) {
     throw createError({
       statusCode: error.statusCode || 500,

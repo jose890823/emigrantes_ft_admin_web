@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
       },
     })
 
-    return response
+    return (response as any).data || response
   } catch (error: any) {
     throw createError({
       statusCode: error.statusCode || 500,
